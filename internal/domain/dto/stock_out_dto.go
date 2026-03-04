@@ -2,29 +2,23 @@ package dto
 
 import "irfanard27/incore-api/internal/domain/entity"
 
-type StockInDTO struct {
-	ID            string           `json:"id"`
-	TransactionID string           `json:"transaction_id"`
-	Status        string           `json:"status"`
-	TotalItem     int              `json:"total_item"`
-	Items         []StockInItemDTO `json:"items"`
-	CreatedAt     string           `json:"created_at"`
-	UpdatedAt     string           `json:"updated_at"`
+type StockOutDTO struct {
+	ID            string            `json:"id"`
+	TransactionID string            `json:"transaction_id"`
+	Status        string            `json:"status"`
+	TotalItem     int               `json:"total_item"`
+	Items         []StockOutItemDTO `json:"items"`
+	CreatedAt     string            `json:"created_at"`
+	UpdatedAt     string            `json:"updated_at"`
 }
 
-type StockInItemDTO struct {
+type StockOutItemDTO struct {
 	InventoryID string               `json:"inventory_id"`
 	Quantity    int                  `json:"quantity"`
 	Inventory   *MinimalInventoryDTO `json:"inventory"`
 }
 
-type MinimalInventoryDTO struct {
-	ID   string `json:"id"`
-	Sku  string `json:"sku"`
-	Name string `json:"name"`
-}
-
-type StocksInDTO struct {
+type StocksOutDTO struct {
 	ID            string `json:"id"`
 	TransactionID string `json:"transaction_id"`
 	Status        string `json:"status"`
@@ -33,15 +27,18 @@ type StocksInDTO struct {
 	UpdatedAt     string `json:"updated_at"`
 }
 
-type CreateStockInDTO struct {
-	Items []StockInItemDTO `json:"items"`
+type CreateStockOutDTO struct {
+	Items []StockOutItemDTO `json:"items"`
 }
 
-func (c CreateStockInDTO) ToEntity() []entity.StockInItem {
+type UpdateStockOutStatusDTO struct {
+	Status string `json:"status" binding:"required"`
+}
 
-	items := []entity.StockInItem{}
+func (c CreateStockOutDTO) ToEntity() []entity.StockOutItem {
+	items := []entity.StockOutItem{}
 	for _, item := range c.Items {
-		items = append(items, entity.StockInItem{
+		items = append(items, entity.StockOutItem{
 			InventoryID: item.InventoryID,
 			Quantity:    item.Quantity,
 		})
@@ -49,19 +46,19 @@ func (c CreateStockInDTO) ToEntity() []entity.StockInItem {
 	return items
 }
 
-func ToStocksInDTO(stock *entity.StockIn) StocksInDTO {
-	return StocksInDTO{
+func ToStocksOutDTO(stock *entity.StockOut, totalItem int) StocksOutDTO {
+	return StocksOutDTO{
 		ID:            stock.ID,
 		TransactionID: stock.TransactionID,
 		Status:        stock.Status,
-		TotalItems:    stock.TotalItem,
+		TotalItems:    totalItem,
 		CreatedAt:     stock.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:     stock.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 
-func ToStockInDTOWithItems(stock *entity.StockIn, items []entity.StockInItem, inventories []entity.Inventory) StockInDTO {
-	stockInItems := make([]StockInItemDTO, len(items))
+func ToStockOutDTOWithItems(stock *entity.StockOut, items []entity.StockOutItem, inventories []entity.Inventory) StockOutDTO {
+	stockOutItems := make([]StockOutItemDTO, len(items))
 	for i, item := range items {
 		var inventory *MinimalInventoryDTO
 		if i < len(inventories) {
@@ -72,28 +69,32 @@ func ToStockInDTOWithItems(stock *entity.StockIn, items []entity.StockInItem, in
 			}
 		}
 
-		stockInItems[i] = StockInItemDTO{
+		stockOutItems[i] = StockOutItemDTO{
 			InventoryID: item.InventoryID,
 			Quantity:    item.Quantity,
 			Inventory:   inventory,
 		}
 	}
 
-	return StockInDTO{
+	return StockOutDTO{
 		ID:            stock.ID,
 		TransactionID: stock.TransactionID,
 		Status:        stock.Status,
-		TotalItem:     stock.TotalItem,
-		Items:         stockInItems,
+		TotalItem:     len(items),
+		Items:         stockOutItems,
 		CreatedAt:     stock.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:     stock.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 
-func ToStocksInDTOList(stocks []entity.StockIn) []StocksInDTO {
-	res := make([]StocksInDTO, len(stocks))
+func ToStocksOutDTOList(stocks []entity.StockOut, totalItems []int) []StocksOutDTO {
+	res := make([]StocksOutDTO, len(stocks))
 	for i, stock := range stocks {
-		res[i] = ToStocksInDTO(&stock)
+		totalItem := 0
+		if i < len(totalItems) {
+			totalItem = totalItems[i]
+		}
+		res[i] = ToStocksOutDTO(&stock, totalItem)
 	}
 	return res
 }

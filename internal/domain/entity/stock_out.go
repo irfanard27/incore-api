@@ -9,3 +9,11 @@ type StockOut struct {
 	CreatedAt     time.Time `db:"created_at"`
 	UpdatedAt     time.Time `db:"updated_at"`
 }
+
+const (
+	StockOutStatusDraft      = "DRAFT"
+	StockOutStatusAllocated  = "ALLOCATED"
+	StockOutStatusInProgress = "IN_PROGRESS"
+	StockOutStatusDone       = "DONE"
+	StockOutStatusCancelled  = "CANCELLED"
+)

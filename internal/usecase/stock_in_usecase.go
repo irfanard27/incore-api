@@ -10,23 +10,35 @@ import (
 
 type StockInUsecase interface {
 	CreateStockIn(ctx context.Context, items []entity.StockInItem) (*entity.StockIn, error)
-	GetStockInById(ctx context.Context, id string) (*entity.StockIn, error)
+	GetStockInById(ctx context.Context, id string) (*entity.StockIn, []entity.StockInItem, []entity.Inventory, error)
 	GetStockInByTransactionID(ctx context.Context, transactionID string) (*entity.StockIn, error)
 	GetAllStockIn(ctx context.Context) ([]entity.StockIn, error)
 	UpdateStockIn(ctx context.Context, id string, transactionID, status string) (*entity.StockIn, error)
+	UpdateStatusToInProgress(ctx context.Context, id string) (*entity.StockIn, error)
+	UpdateStatusToDone(ctx context.Context, id string) (*entity.StockIn, error)
 	DeleteStockIn(ctx context.Context, id string) error
 }
 
 type stockInUsecase struct {
 	stockInRepo     repository.StockInRepository
 	stockInItemRepo repository.StockInItemRepository
+	inventoryRepo   repository.InventoryRepository
 }
 
-func NewStockInUsecase(stockInRepo repository.StockInRepository, stockInItemRepo repository.StockInItemRepository) StockInUsecase {
+func NewStockInUsecase(stockInRepo repository.StockInRepository, stockInItemRepo repository.StockInItemRepository, inventoryRepo repository.InventoryRepository) StockInUsecase {
 	return &stockInUsecase{
 		stockInRepo:     stockInRepo,
 		stockInItemRepo: stockInItemRepo,
+		inventoryRepo:   inventoryRepo,
 	}
+}
+
+func (s *stockInUsecase) GetAllStockIn(ctx context.Context) ([]entity.StockIn, error) {
+	stockIns, err := s.stockInRepo.All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all stock ins: %w", err)
+	}
+	return stockIns, nil
 }
 
 func (s *stockInUsecase) CreateStockIn(ctx context.Context, items []entity.StockInItem) (*entity.StockIn, error) {
@@ -61,12 +73,18 @@ func (s *stockInUsecase) CreateStockIn(ctx context.Context, items []entity.Stock
 	return stockIn, nil
 }
 
-func (s *stockInUsecase) GetStockInById(ctx context.Context, id string) (*entity.StockIn, error) {
+func (s *stockInUsecase) GetStockInById(ctx context.Context, id string) (*entity.StockIn, []entity.StockInItem, []entity.Inventory, error) {
 	stockIn, err := s.stockInRepo.GetById(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get stock in by id: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get stock in by id: %w", err)
 	}
-	return stockIn, nil
+
+	items, inventories, err := s.stockInItemRepo.GetByStockInIDWithInventory(ctx, id)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get stock in items: %w", err)
+	}
+
+	return stockIn, items, inventories, nil
 }
 
 func (s *stockInUsecase) GetStockInByTransactionID(ctx context.Context, transactionID string) (*entity.StockIn, error) {
@@ -75,14 +93,6 @@ func (s *stockInUsecase) GetStockInByTransactionID(ctx context.Context, transact
 		return nil, fmt.Errorf("failed to get stock in by transaction id: %w", err)
 	}
 	return stockIn, nil
-}
-
-func (s *stockInUsecase) GetAllStockIn(ctx context.Context) ([]entity.StockIn, error) {
-	stockIns, err := s.stockInRepo.All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get all stock ins: %w", err)
-	}
-	return stockIns, nil
 }
 
 func (s *stockInUsecase) UpdateStockIn(ctx context.Context, id string, transactionID, status string) (*entity.StockIn, error) {
@@ -100,6 +110,78 @@ func (s *stockInUsecase) UpdateStockIn(ctx context.Context, id string, transacti
 	err = s.stockInRepo.Update(ctx, existingStockIn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update stock in: %w", err)
+	}
+
+	return existingStockIn, nil
+}
+
+func (s *stockInUsecase) UpdateStatusToInProgress(ctx context.Context, id string) (*entity.StockIn, error) {
+	// First check if stock in exists and validate current status
+	existingStockIn, err := s.stockInRepo.GetById(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("stock in not found: %w", err)
+	}
+
+	// Validate that current status is 'created' before updating to 'in_progress'
+	if existingStockIn.Status != "created" {
+		return nil, fmt.Errorf("cannot update status to in_progress: current status is '%s', expected 'created'", existingStockIn.Status)
+	}
+
+	// Update status to in_progress
+	existingStockIn.Status = "in_progress"
+	existingStockIn.UpdatedAt = time.Now()
+
+	err = s.stockInRepo.Update(ctx, existingStockIn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update stock in status: %w", err)
+	}
+
+	return existingStockIn, nil
+}
+
+func (s *stockInUsecase) UpdateStatusToDone(ctx context.Context, id string) (*entity.StockIn, error) {
+	// First check if stock in exists and validate current status
+	existingStockIn, err := s.stockInRepo.GetById(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("stock in not found: %w", err)
+	}
+
+	// Validate that current status is 'in_progress' before updating to 'done'
+	if existingStockIn.Status != "in_progress" {
+		return nil, fmt.Errorf("cannot update status to done: current status is '%s', expected 'in_progress'", existingStockIn.Status)
+	}
+
+	// Get all stock in items for this stock in
+	stockInItems, err := s.stockInItemRepo.GetByStockInID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stock in items: %w", err)
+	}
+
+	// Update inventory quantities for each item
+	for _, item := range stockInItems {
+		// Get the current inventory
+		inventory, err := s.inventoryRepo.GetById(ctx, item.InventoryID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get inventory %s: %w", item.InventoryID, err)
+		}
+
+		// Update inventory quantity
+		inventory.Quantity += item.Quantity
+
+		// Save the updated inventory
+		err = s.inventoryRepo.Update(ctx, inventory)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update inventory quantity for %s: %w", item.InventoryID, err)
+		}
+	}
+
+	// Update stock in status to done
+	existingStockIn.Status = "done"
+	existingStockIn.UpdatedAt = time.Now()
+
+	err = s.stockInRepo.Update(ctx, existingStockIn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update stock in status: %w", err)
 	}
 
 	return existingStockIn, nil

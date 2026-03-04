@@ -39,6 +39,8 @@ func main() {
 	inventoryRepo := pgsql.NewInventoryRepository(database)
 	stockInRepo := pgsql.NewStockInRepository(database)
 	stockInItemRepo := pgsql.NewStockInItemRepository(database)
+	stockOutRepo := pgsql.NewStockOutRepository(database)
+	stockOutItemRepo := pgsql.NewStockOutItemRepository(database)
 
 	// Setup JWT service with secret key from environment
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -53,7 +55,8 @@ func main() {
 		AuthUsecase:      usecase.NewAuthUsecase(userRepo, jwtService),
 		InventoryUsecase: usecase.NewInventoryUsecase(inventoryRepo),
 		JWTService:       jwtService,
-		StockInUsecase:   usecase.NewStockInUsecase(stockInRepo, stockInItemRepo),
+		StockInUsecase:   usecase.NewStockInUsecase(stockInRepo, stockInItemRepo, inventoryRepo),
+		StockOutUsecase:  usecase.NewStockOutUsecase(stockOutRepo, stockOutItemRepo, inventoryRepo),
 	})
 
 	// Setup Gin router

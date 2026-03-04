@@ -51,7 +51,22 @@ func (h *InventoryHandler) GetInventoryById(c *gin.Context) {
 		return
 	}
 
-	httpresponse.SuccessResponse(c, "Inventory retrieved successfully", inventory)
+	var customer string
+	if inventory.Customer != nil {
+		customer = *inventory.Customer
+	}
+
+	data := dto.InventoryDTO{
+		ID:               inventory.ID,
+		Name:             inventory.Name,
+		Sku:              inventory.Sku,
+		Quantity:         inventory.Quantity,
+		ReservedQuantity: inventory.ReservedQuantity,
+		Customer:         customer,
+		Price:            inventory.Price,
+	}
+
+	httpresponse.SuccessResponse(c, "Inventory retrieved successfully", data)
 }
 
 // GetAllInventories handles getting all inventories

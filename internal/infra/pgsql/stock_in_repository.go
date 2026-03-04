@@ -17,29 +17,34 @@ func NewStockInRepository(db *sqlx.DB) repository.StockInRepository {
 	return &stockInRepository{db: db}
 }
 
-func (r *stockInRepository) Create(ctx context.Context, stockIn *entity.StockIn) (string, error) {
+func (r *stockInRepository) All(ctx context.Context) ([]entity.StockIn, error) {
 	query := `
-		INSERT INTO stock_in (transaction_id, created_at, updated_at)
-		VALUES ($1, NOW(), NOW())
-		RETURNING id
+		SELECT s.*, COALESCE(COUNT(si.id), 0) as total_item
+		FROM stock_in s 
+		LEFT JOIN stock_in_items si ON s.id = si.stock_in_id
+		GROUP BY s.id
+		ORDER BY s.created_at DESC
 	`
-	var id string
-	err := r.db.QueryRowxContext(ctx, query, stockIn.TransactionID).Scan(&id)
+	var stockIns []entity.StockIn
+	err := r.db.SelectContext(ctx, &stockIns, query)
 	if err != nil {
-		return "", fmt.Errorf("failed to create stock in: %w", err)
+		return nil, fmt.Errorf("failed to get all stock ins: %w", err)
 	}
-	return id, nil
+	return stockIns, nil
 }
 
 func (r *stockInRepository) GetById(ctx context.Context, id string) (*entity.StockIn, error) {
 	query := `
-		SELECT id, transaction_id, status, created_at, updated_at
-		FROM stock_in
-		WHERE id = :id
+		SELECT s.*, COALESCE(COUNT(si.id), 0) as total_item
+		FROM stock_in s 
+		LEFT JOIN stock_in_items si ON s.id = si.stock_in_id
+		WHERE s.id = :id
+		GROUP BY s.id
 	`
 	params := map[string]any{
 		"id": id,
 	}
+
 	rows, err := r.db.NamedQueryContext(ctx, query, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stock in by id: %w", err)
@@ -61,7 +66,7 @@ func (r *stockInRepository) GetById(ctx context.Context, id string) (*entity.Sto
 
 func (r *stockInRepository) GetByTransactionID(ctx context.Context, transactionID string) (*entity.StockIn, error) {
 	query := `
-		SELECT id, transaction_id, status, created_at, updated_at
+		SELECT *
 		FROM stock_in
 		WHERE transaction_id = :transaction_id
 	`
@@ -87,6 +92,20 @@ func (r *stockInRepository) GetByTransactionID(ctx context.Context, transactionI
 	return &stockIn, nil
 }
 
+func (r *stockInRepository) Create(ctx context.Context, stockIn *entity.StockIn) (string, error) {
+	query := `
+		INSERT INTO stock_in (transaction_id, created_at, updated_at)
+		VALUES ($1, NOW(), NOW())
+		RETURNING id
+	`
+	var id string
+	err := r.db.QueryRowxContext(ctx, query, stockIn.TransactionID).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("failed to create stock in: %w", err)
+	}
+	return id, nil
+}
+
 func (r *stockInRepository) Update(ctx context.Context, stockIn *entity.StockIn) error {
 	query := `
 		UPDATE stock_in
@@ -110,18 +129,4 @@ func (r *stockInRepository) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to delete stock in: %w", err)
 	}
 	return nil
-}
-
-func (r *stockInRepository) All(ctx context.Context) ([]entity.StockIn, error) {
-	query := `
-		SELECT id, transaction_id, status, created_at, updated_at
-		FROM stock_in
-		ORDER BY created_at DESC
-	`
-	var stockIns []entity.StockIn
-	err := r.db.SelectContext(ctx, &stockIns, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get all stock ins: %w", err)
-	}
-	return stockIns, nil
 }

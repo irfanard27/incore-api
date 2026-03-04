@@ -18,53 +18,39 @@ func NewStockOutItemRepository(db *sqlx.DB) repository.StockOutItemRepository {
 }
 
 func (r *stockOutItemRepository) Create(ctx context.Context, stockOutItem *entity.StockOutItem) error {
+	// Not used currently but required by interface
+	return fmt.Errorf("Create method not implemented")
+}
+
+func (r *stockOutItemRepository) BatchCreate(ctx context.Context, stockOutItems []entity.StockOutItem) error {
+	if len(stockOutItems) == 0 {
+		return fmt.Errorf("no stock out items provided")
+	}
+
 	query := `
-		INSERT INTO stock_out_items (id, stock_out_id, inventory_id, quantity, created_at, updated_at)
-		VALUES (:id, :stock_out_id, :inventory_id, :quantity, :created_at, :updated_at)
+		INSERT INTO stock_out_items (stock_out_id, inventory_id, quantity, created_at, updated_at)
+		VALUES (:stock_out_id, :inventory_id, :quantity, NOW(), NOW())
 	`
-	_, err := r.db.NamedExecContext(ctx, query, stockOutItem)
+	_, err := r.db.NamedExecContext(ctx, query, stockOutItems)
 	if err != nil {
-		return fmt.Errorf("failed to create stock out item: %w", err)
+		return fmt.Errorf("failed to batch create stock out items: %w", err)
 	}
 	return nil
 }
 
 func (r *stockOutItemRepository) GetById(ctx context.Context, id string) (*entity.StockOutItem, error) {
-	query := `
-		SELECT id, stock_out_id, inventory_id, quantity, created_at, updated_at
-		FROM stock_out_items
-		WHERE id = :id
-	`
-	params := map[string]interface{}{
-		"id": id,
-	}
-	rows, err := r.db.NamedQueryContext(ctx, query, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get stock out item by id: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return nil, fmt.Errorf("stock out item not found")
-	}
-
-	var stockOutItem entity.StockOutItem
-	err = rows.StructScan(&stockOutItem)
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan stock out item: %w", err)
-	}
-
-	return &stockOutItem, nil
+	// Not used currently but required by interface
+	return nil, fmt.Errorf("GetById method not implemented")
 }
 
 func (r *stockOutItemRepository) GetByStockOutID(ctx context.Context, stockOutID string) ([]entity.StockOutItem, error) {
 	query := `
-		SELECT id, stock_out_id, inventory_id, quantity, created_at, updated_at
+		SELECT *
 		FROM stock_out_items
 		WHERE stock_out_id = :stock_out_id
 		ORDER BY created_at DESC
 	`
-	params := map[string]interface{}{
+	params := map[string]any{
 		"stock_out_id": stockOutID,
 	}
 	rows, err := r.db.NamedQueryContext(ctx, query, params)
@@ -84,6 +70,52 @@ func (r *stockOutItemRepository) GetByStockOutID(ctx context.Context, stockOutID
 	}
 
 	return stockOutItems, nil
+}
+
+func (r *stockOutItemRepository) GetByStockOutIDWithInventory(ctx context.Context, stockOutID string) ([]entity.StockOutItem, []entity.Inventory, error) {
+	query := `
+		SELECT soi.*, i.id, i.sku, i.name
+		FROM stock_out_items soi
+		LEFT JOIN inventories i ON soi.inventory_id = i.id
+		WHERE soi.stock_out_id = :stock_out_id
+		ORDER BY soi.created_at DESC
+	`
+	params := map[string]any{
+		"stock_out_id": stockOutID,
+	}
+	rows, err := r.db.NamedQueryContext(ctx, query, params)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get stock out items by stock out id: %w", err)
+	}
+	defer rows.Close()
+
+	var stockOutItems []entity.StockOutItem
+	var inventories []entity.Inventory
+
+	for rows.Next() {
+		var stockOutItem entity.StockOutItem
+		var inventoryID, inventorySku, inventoryName string
+
+		err = rows.Scan(
+			&stockOutItem.ID, &stockOutItem.StockOutID, &stockOutItem.InventoryID, &stockOutItem.Quantity, &stockOutItem.CreatedAt, &stockOutItem.UpdatedAt,
+			&inventoryID, &inventorySku, &inventoryName,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to scan stock out item: %w", err)
+		}
+
+		stockOutItems = append(stockOutItems, stockOutItem)
+
+		// Create inventory with only the fields we need
+		inventory := entity.Inventory{
+			ID:   inventoryID,
+			Sku:  inventorySku,
+			Name: inventoryName,
+		}
+		inventories = append(inventories, inventory)
+	}
+
+	return stockOutItems, inventories, nil
 }
 
 func (r *stockOutItemRepository) Update(ctx context.Context, stockOutItem *entity.StockOutItem) error {
@@ -112,15 +144,6 @@ func (r *stockOutItemRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *stockOutItemRepository) All(ctx context.Context) ([]entity.StockOutItem, error) {
-	query := `
-		SELECT id, stock_out_id, inventory_id, quantity, created_at, updated_at
-		FROM stock_out_items
-		ORDER BY created_at DESC
-	`
-	var stockOutItems []entity.StockOutItem
-	err := r.db.SelectContext(ctx, &stockOutItems, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get all stock out items: %w", err)
-	}
-	return stockOutItems, nil
+	// Not used currently but required by interface
+	return nil, fmt.Errorf("All method not implemented")
 }
